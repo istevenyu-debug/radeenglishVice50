@@ -2,10 +2,43 @@
 const E=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),N=s=>String(s||'').toLowerCase().trim().replace(/\s+/g,' '),F=n=>(Math.round(n*10)/10).toFixed(1).replace('.0','');
 function b(g){let a=(g-1)*5+1;return[a,a+4]}function ids(g){let[a,z]=b(g);return Q.filter(q=>q.id>=a&&q.id<=z).map(q=>q.id)}function slots(g){return ids(g).reduce((n,id)=>n+Q.find(q=>q.id==id).fillAnswers.length,0)}
 function stats(){let x={};try{x=JSON.parse(localStorage.getItem(SK)||'{}')}catch{};for(let i=1;i<=10;i++)if(!x[i])x[i]={n:0,sum:0};return x}function st(g){let x=stats()[g];return`已練 ${x.n} 次｜平均 ${F(x.n?x.sum/x.n:0)} 分`}
-function hist(){try{return JSON.parse(localStorage.getItem(HK)||'[]')}catch{return[]}}function say(t){if(!speechSynthesis)return;speechSynthesis.cancel();let u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=.82;speechSynthesis.speak(u)}function aud(a){return a.map(t=>`<span class="audio">${E(t)} <button data-a="${E(t)}">🔊</button></span>`).join('')}function ba(){document.querySelectorAll('[data-a]').forEach(x=>x.onclick=()=>say(x.dataset.a))}
+function hist(){try{return JSON.parse(localStorage.getItem(HK)||'[]')}catch{return[]}}let _voices=[];
+function loadVoices(){
+  if(!('speechSynthesis' in window))return [];
+  _voices=window.speechSynthesis.getVoices()||[];
+  return _voices;
+}
+if('speechSynthesis' in window){
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged=loadVoices;
+}
+function say(t){
+  if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined'){
+    alert('這台裝置的瀏覽器目前無法使用語音功能，請改用 Safari、Chrome 或 Edge。');
+    return;
+  }
+  const synth=window.speechSynthesis;
+  const play=()=>{
+    let u=new SpeechSynthesisUtterance(String(t));
+    u.lang='en-US';
+    u.rate=0.78;
+    u.pitch=1;
+    u.volume=1;
+    let vs=loadVoices();
+    let v=vs.find(x=>/^en-US$/i.test(x.lang)&&/Samantha|Ava|Siri|Google|Microsoft/i.test(x.name))
+       ||vs.find(x=>/^en-US$/i.test(x.lang))
+       ||vs.find(x=>/^en-/i.test(x.lang));
+    if(v)u.voice=v;
+    u.onerror=(e)=>{if(e.error!=='interrupted'&&e.error!=='canceled')console.log('speech error',e.error);};
+    if(synth.paused)synth.resume();
+    synth.speak(u);
+  };
+  synth.cancel();
+  setTimeout(play,120);
+}function aud(a){return a.map(t=>`<span class="audio">${E(t)} <button type="button" data-a="${E(t)}" aria-label="播放 ${E(t)} 的英文發音">🔊</button></span>`).join('')}function ba(){document.querySelectorAll('[data-a]').forEach(x=>x.onclick=(e)=>{e.preventDefault();e.stopPropagation();say(x.dataset.a)})}
 function home(){let gs=Array.from({length:10},(_,i)=>i+1).map(g=>{let[a,z]=b(g),n=slots(g);return`<div class="g ${C.g==g?'on':''}"><strong>第 ${g} 組</strong><div class="small">${a}–${z}題 · ${n}格</div><div class="stat">${st(g)}</div><div class="small">每格 ${F(100/n)} 分</div><button class="btn full" data-g="${g}">${C.g==g?'已選擇':'選這組'}</button></div>`}).join('');
 $('#app').innerHTML=`<div class="hero"><h1>貿易英文 50 題</h1><div class="muted">選擇＋填充刷題</div><button class="btn full" id="history" style="margin-top:14px">近 10 次完整題組成績</button></div><div class="grid"><button class="btn ${C.type=='choice'?'primary':''}" data-t="choice">選擇題</button><button class="btn ${C.type=='fill'?'primary':''}" data-t="fill">填充題</button></div>${C.type=='fill'?`<h2>填充題：每 5 題一組</h2><div class="groups">${gs}</div>`:`<h2>選擇題範圍</h2><div class="grid"><button class="btn" data-r="front">前25題</button><button class="btn" data-r="back">後25題</button></div><button class="btn full" data-r="all" style="margin-top:9px">全部50題</button>`}<button class="btn primary full" id="go" style="margin-top:18px">開始練習</button>`;
-document.querySelectorAll('[data-t]').forEach(x=>x.onclick=()=>{C.type=x.dataset.t;home()});document.querySelectorAll('[data-g]').forEach(x=>x.onclick=()=>{C.g=+x.dataset.g;home()});document.querySelectorAll('[data-r]').forEach(x=>x.onclick=()=>{C.range=x.dataset.r;start()});$('#go').onclick=start;$('#history').onclick=showHist}
+document.querySelectorAll('[data-t]').forEach(x=>x.onclick=()=>{C.type=x.dataset.t;home()});document.querySelectorAll('[data-g]').forEach(x=>x.onclick=()=>{C.g=+x.dataset.g;home()});document.querySelectorAll('[data-r]').forEach(x=>x.onclick=()=>{C.range=x.dataset.r;start()});$('#go').onclick=()=>start();$('#history').onclick=showHist}
 function start(retryIds=null){let a;if(retryIds)a=retryIds;else if(C.type=='fill')a=ids(C.g);else a=C.range=='front'?Q.filter(q=>q.id<=25).map(q=>q.id):C.range=='back'?Q.filter(q=>q.id>25).map(q=>q.id):Q.map(q=>q.id);S={ids:a,i:0,res:[],retry:!!retryIds,correctSlots:0,totalSlots:C.type=='fill'&&!retryIds?slots(C.g):0};question()}
 function question(){let q=Q.find(x=>x.id==S.ids[S.i]);$('#app').innerHTML=`<div class="top"><b>${C.type=='fill'?`填充題 第${C.g}組`:'選擇題'} · ${S.i+1}/${S.ids.length}</b><button class="btn" id="home">回首頁</button></div><div class="card"><div class="small">原題 ${q.id}</div>${C.type=='fill'?fill(q):choice(q)}<div id="fb"></div><div id="next"></div></div>`;$('#home').onclick=home;C.type=='fill'?bindFill(q):bindChoice(q)}
 function fill(q){let s=q.fillTemplate.replace(/\{(\d+)\}/g,(_,n)=>`<input class="blank" data-i="${n}" autocomplete="off" autocapitalize="none" spellcheck="false">`);return`<p class="zh">${E(q.zh)}</p><div class="q">${s}</div><button class="btn primary" id="check">檢查答案</button>`}
